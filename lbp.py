@@ -8,11 +8,36 @@ import matplotlib.pyplot as plt
 from skimage import feature
 
 # PATH of hyperspectral images
-DATA_DIR = Path('./hytexila/ENVI/wood')
+WOOD_DIR = Path('./hytexila/ENVI/wood')
+TEXTILE_DIR = Path('./hytexila/ENVI/textile')
 SAMPLE = 'wood_01'
 DOWNSAMPLED_CHANNELS = 10 # From HyTexila paper
 LBP_NEIGHBORS = 8
 LBP_RADIUS = 1
+
+def compute_lbp(img, neighbors, radius):
+    """Compute LBP for each channel and concatenate into a single feature vector"""
+    hist = np.array([])
+    for i in range(0, img.shape[2]):
+        lbp = feature.local_binary_pattern(img[:,:,i], neighbors, radius, method="default")
+        hist_i, _ = np.histogram(lbp.ravel(), bins=np.arange(0, 2**neighbors+1))
+        hist = np.concatenate((hist, hist_i))
+    return hist
+
+def histogram_intersection(hist_1, hist_2):
+    """Nice explanation here: https://mpatacchiola.github.io/blog/2016/11/12/the-simplest-classifier-histogram-intersection.html"""
+    minima = np.minimum(hist_1, hist_2)
+    intersection = np.true_divide(np.sum(minima), np.sum(hist_2))  # Normalize
+    return intersection
+
+# TODO
+def extract_zip_file(zip_file, target_dir):
+    """Extracts a zip file to the target directory"""
+    with zf.ZipFile((WOOD_DIR / 'wood_02').with_suffix(".zip")) as archive:
+        print(archive.namelist())
+        # imgfile = archive.open('wood_01.hdr')
+        archive.extract('wood_02.hdr', WOOD_DIR)
+        archive.extract('wood_02.raw', WOOD_DIR)
 
 if __name__ == "__main__":
     # Algo: For each train image, compute LBP features and find the nearest neighbor in the test set
@@ -20,9 +45,9 @@ if __name__ == "__main__":
     # 1. Load all test images
     # 2. Compute LBP histograms for each test image + store in searchable data structure
 
-    with zf.ZipFile((DATA_DIR / SAMPLE).with_suffix(".zip")) as archive:
+    with zf.ZipFile((WOOD_DIR / SAMPLE).with_suffix(".zip")) as archive:
         # print(archive.namelist())
-        img = envi.open((DATA_DIR / SAMPLE).with_suffix(".hdr"), (DATA_DIR / SAMPLE).with_suffix(".raw"))
+        img = envi.open((WOOD_DIR / SAMPLE).with_suffix(".hdr"), (WOOD_DIR / SAMPLE).with_suffix(".raw"))
     
     # Downsample channels in image by uniformly sampling NUM_CHANNELS indexes from the full 186 channels.
     total_channels = img.shape[2]
@@ -33,8 +58,13 @@ if __name__ == "__main__":
     print(ds_img.shape)
     # print(img.metadata)
 
-    # Compute LBP features for each pixel in the image
-    lbp = feature.local_binary_pattern(ds_img[:,:,0], LBP_NEIGHBORS, LBP_RADIUS, method="default")
-    hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, 2**LBP_NEIGHBORS+1))
+    # Compute LBP for each channel and concatenate into a single feature vector
+    hist = compute_lbp(ds_img, LBP_NEIGHBORS, LBP_RADIUS)
+    print(hist.shape)
 
-    # TODO: compute LBP for each channel and concatenate into a single feature vector
+    img2 = envi.open((WOOD_DIR / 'wood_02').with_suffix(".hdr"), (WOOD_DIR / 'wood_02').with_suffix(".raw"))
+    ds_img2 = img2[:,:,keep_channels]
+    hist2 = compute_lbp(ds_img2, LBP_NEIGHBORS, LBP_RADIUS)
+
+    hist_similarity = histogram_intersection(hist, hist2)
+    print(hist_similarity)
