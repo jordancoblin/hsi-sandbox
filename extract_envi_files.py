@@ -1,17 +1,11 @@
-import math
-import numpy as np
 import os
-import spectral as sp
-import spectral.io.envi as envi
 import zipfile as zf
 from pathlib import Path
-import matplotlib.pyplot as plt
-from skimage import feature
 
 ZIP_DIR = Path('./hytexila/ENVI/compressed')
 
 def extract_zip_file(root, file):
-    """Extracts a zip file to the target directory"""
+    """Extracts a zip file to the directory"""
     with zf.ZipFile(os.path.join(root, file)) as archive:
         target_dir = root.replace("compressed", "extracted")
         archive.extract(file.replace(".zip", ".hdr"), target_dir)
