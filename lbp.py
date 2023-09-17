@@ -8,6 +8,9 @@ import zipfile as zf
 from pathlib import Path
 import matplotlib.pyplot as plt
 from skimage import feature
+from sklearn.metrics import accuracy_score
+import time
+from tqdm import tqdm
 
 TRAIN_FILE_REGISTRY = Path('./hytexila/classification/train.txt')
 TEST_FILE_REGISTRY = Path('./hytexila/classification/test.txt')
@@ -90,25 +93,19 @@ class HistogramClassifier:
 def build_histogram_classifier(registry_file, pkl_file, dump_pkl=True):
     hist_classifier = HistogramClassifier()
     train_registry = open(registry_file, 'r')
-    i = 0   
-    while True:
-        subimg_data = train_registry.readline().split('\t')
+    lines = train_registry.readlines()
+    for line in tqdm(lines):
+        if not line:
+            break
+        subimg_data = line.split('\t')
         if len(subimg_data) != 6:
             continue
-
-        if i > 10:
-            break
-        # if not line:
-        #     break
         
         subimg_class = get_subimg_class(subimg_data[0])
-        print(subimg_data)
-        print('subimg_class: ', subimg_class)
         subimg = get_subimage(subimg_data[0], int(subimg_data[1]), int(subimg_data[2]), int(subimg_data[3]), int(subimg_data[4]))
         ds_subimg = downsample_channels(subimg, DOWNSAMPLED_CHANNELS)
         hist = compute_lbp(ds_subimg, LBP_NEIGHBORS, LBP_RADIUS)
         hist_classifier.add_model_histogram(hist, subimg_class)
-        i+=1
     
     if dump_pkl:
         pickle.dump(hist_classifier, open(pkl_file, 'wb'))
@@ -116,6 +113,10 @@ def build_histogram_classifier(registry_file, pkl_file, dump_pkl=True):
     return hist_classifier
 
 if __name__ == "__main__":
+    # Algo: For each train image, compute LBP features and find the nearest neighbor in the test set
+    # Similarity measure: LBP feature histogram intersection
+    # 1. Load all test images
+    # 2. Compute LBP histograms for each test image + store in searchable data structure
     parser = argparse.ArgumentParser(description="run_file")
     parser.add_argument('--load-classifier', default=False, action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
@@ -123,45 +124,39 @@ if __name__ == "__main__":
     if args.load_classifier:
         hist_classifier = pickle.load(open(CLASSIFIER_PKL, 'rb'))
     else:
+        # Populate histogram classifier with LBP histograms for each training subimage
+        start = time.time()
         hist_classifier = build_histogram_classifier(TRAIN_FILE_REGISTRY, CLASSIFIER_PKL)
+        print(f'Building hist classifier took: {time.time() - start}s')
 
-
-    # Algo: For each train image, compute LBP features and find the nearest neighbor in the test set
-    # Similarity measure: LBP feature histogram intersection
-    # 1. Load all test images
-    # 2. Compute LBP histograms for each test image + store in searchable data structure
-    
-    # Populate histogram classifier with LBP histograms for each training subimage
-    
     # Predict classes for each test subimage
+    print("Starting test phase...")
+    start = time.time()
     test_registry = open(TEST_FILE_REGISTRY, 'r')
-    i = 0   
-    while True:
-        subimg_data = test_registry.readline().split('\t')
+    lines = test_registry.readlines()
+    preds = []
+    targets = []
+    for line in tqdm(lines):
+        if not line:
+            break
+        subimg_data = line.split('\t')
         if len(subimg_data) != 6:
             continue
-
-        if i > 10:
-            break
 
         subimg = get_subimage(subimg_data[0], int(subimg_data[1]), int(subimg_data[2]), int(subimg_data[3]), int(subimg_data[4]))
         ds_subimg = downsample_channels(subimg, DOWNSAMPLED_CHANNELS)
         hist = compute_lbp(ds_subimg, LBP_NEIGHBORS, LBP_RADIUS)
         predicted_class = hist_classifier.predict_class(hist)
-        print(f'predicted class: {predicted_class}, true class: {get_subimg_class(subimg_data[0])}')
-
-        i+=1
-
-    # Compute LBP for each channel and concatenate into a single feature vector
-    # ds_img = downsample_channels(img, DOWNSAMPLED_CHANNELS)
-    # hist = compute_lbp(ds_img, LBP_NEIGHBORS, LBP_RADIUS)
-    # print(hist.shape)
-
-    # hist_similarity = histogram_intersection(hist, hist2)
-    # print(hist_similarity)
+        true_class = get_subimg_class(subimg_data[0])
+        print(f'predicted class: {predicted_class}, true class: {true_class}')
+        preds.append(predicted_class)
+        targets.append(true_class)
+    
+    print(f'accuracy: {accuracy_score(targets, preds)}')
+    print(f'Test phase took: {time.time() - start}s')
 
     # TODO: 
     #  - [X] Write script to extract all zip files
     #  - [X] Figure out how to parse train and test sub-images
     #  - [X] Compute histograms for all test images and store in searchable data structure
-    #  - For each train image, find the nearest neighbor in the test set and compute accuracy over all "train" images
+    #  - [ ] For each train image, find the nearest neighbor in the test set and compute accuracy over all "train" images
