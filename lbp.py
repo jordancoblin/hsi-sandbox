@@ -1,5 +1,7 @@
+import argparse
 import math
 import numpy as np
+import pickle
 import spectral as sp
 import spectral.io.envi as envi
 import zipfile as zf
@@ -9,6 +11,7 @@ from skimage import feature
 
 TRAIN_FILE_REGISTRY = Path('./hytexila/classification/train.txt')
 TEST_FILE_REGISTRY = Path('./hytexila/classification/test.txt')
+CLASSIFIER_PKL = Path('hist_classifier.pkl')
 DOWNSAMPLED_CHANNELS = 10 # From HyTexila paper
 LBP_NEIGHBORS = 8
 LBP_RADIUS = 1
@@ -83,32 +86,15 @@ class HistogramClassifier:
                 max_class = self.model_classes[i]
         return max_class
 
-if __name__ == "__main__":
-    # Algo: For each train image, compute LBP features and find the nearest neighbor in the test set
-    # Similarity measure: LBP feature histogram intersection
-    # 1. Load all test images
-    # 2. Compute LBP histograms for each test image + store in searchable data structure
 
-    # with zf.ZipFile((WOOD_DIR / SAMPLE).with_suffix(".zip")) as archive:
-    #     # print(archive.namelist())
-    #     img = envi.open((WOOD_DIR / SAMPLE).with_suffix(".hdr"), (WOOD_DIR / SAMPLE).with_suffix(".raw"))
+def build_histogram_classifier(registry_file, pkl_file, dump_pkl=True):
     hist_classifier = HistogramClassifier()
-
-    train_registry = open(TRAIN_FILE_REGISTRY, 'r')
+    train_registry = open(registry_file, 'r')
     i = 0   
     while True:
         subimg_data = train_registry.readline().split('\t')
         if len(subimg_data) != 6:
             continue
-        
-        if i == 9:
-            subimg_class = get_subimg_class(subimg_data[0])
-            subimg = get_subimage(subimg_data[0], int(subimg_data[1]), int(subimg_data[2]), int(subimg_data[3]), int(subimg_data[4]))
-            ds_subimg = downsample_channels(subimg, DOWNSAMPLED_CHANNELS)
-            hist = compute_lbp(ds_subimg, LBP_NEIGHBORS, LBP_RADIUS)
-            print(f"predicting class for {subimg_data[0]}")
-            pred = hist_classifier.predict_class(hist)
-            print('predicted: ', pred)
 
         if i > 10:
             break
@@ -122,6 +108,47 @@ if __name__ == "__main__":
         ds_subimg = downsample_channels(subimg, DOWNSAMPLED_CHANNELS)
         hist = compute_lbp(ds_subimg, LBP_NEIGHBORS, LBP_RADIUS)
         hist_classifier.add_model_histogram(hist, subimg_class)
+        i+=1
+    
+    if dump_pkl:
+        pickle.dump(hist_classifier, open(pkl_file, 'wb'))
+    
+    return hist_classifier
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="run_file")
+    parser.add_argument('--load-classifier', default=False, action=argparse.BooleanOptionalAction)
+    args = parser.parse_args()
+
+    if args.load_classifier:
+        hist_classifier = pickle.load(open(CLASSIFIER_PKL, 'rb'))
+    else:
+        hist_classifier = build_histogram_classifier(TRAIN_FILE_REGISTRY, CLASSIFIER_PKL)
+
+
+    # Algo: For each train image, compute LBP features and find the nearest neighbor in the test set
+    # Similarity measure: LBP feature histogram intersection
+    # 1. Load all test images
+    # 2. Compute LBP histograms for each test image + store in searchable data structure
+    
+    # Populate histogram classifier with LBP histograms for each training subimage
+    
+    # Predict classes for each test subimage
+    test_registry = open(TEST_FILE_REGISTRY, 'r')
+    i = 0   
+    while True:
+        subimg_data = test_registry.readline().split('\t')
+        if len(subimg_data) != 6:
+            continue
+
+        if i > 10:
+            break
+
+        subimg = get_subimage(subimg_data[0], int(subimg_data[1]), int(subimg_data[2]), int(subimg_data[3]), int(subimg_data[4]))
+        ds_subimg = downsample_channels(subimg, DOWNSAMPLED_CHANNELS)
+        hist = compute_lbp(ds_subimg, LBP_NEIGHBORS, LBP_RADIUS)
+        predicted_class = hist_classifier.predict_class(hist)
+        print(f'predicted class: {predicted_class}, true class: {get_subimg_class(subimg_data[0])}')
 
         i+=1
 
@@ -136,5 +163,5 @@ if __name__ == "__main__":
     # TODO: 
     #  - [X] Write script to extract all zip files
     #  - [X] Figure out how to parse train and test sub-images
-    #  - Compute histograms for all test images and store in searchable data structure
+    #  - [X] Compute histograms for all test images and store in searchable data structure
     #  - For each train image, find the nearest neighbor in the test set and compute accuracy over all "train" images
