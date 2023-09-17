@@ -30,15 +30,6 @@ def histogram_intersection(hist_1, hist_2):
     intersection = np.true_divide(np.sum(minima), np.sum(hist_2))  # Normalize
     return intersection
 
-# TODO
-def extract_zip_file(zip_file, target_dir):
-    """Extracts a zip file to the target directory"""
-    with zf.ZipFile((WOOD_DIR / 'wood_02').with_suffix(".zip")) as archive:
-        print(archive.namelist())
-        # imgfile = archive.open('wood_01.hdr')
-        archive.extract('wood_02.hdr', WOOD_DIR)
-        archive.extract('wood_02.raw', WOOD_DIR)
-
 if __name__ == "__main__":
     # Algo: For each train image, compute LBP features and find the nearest neighbor in the test set
     # Similarity measure: LBP feature histogram intersection
@@ -68,3 +59,9 @@ if __name__ == "__main__":
 
     hist_similarity = histogram_intersection(hist, hist2)
     print(hist_similarity)
+
+    # TODO: 
+    #  - [X] Write script to extract all zip files
+    #  - Figure out how to parse train and test sub-images
+    #  - Compute histograms for all test images and store in searchable data structure
+    #  - For each train image, find the nearest neighbor in the test set and compute accuracy over all "train" images
