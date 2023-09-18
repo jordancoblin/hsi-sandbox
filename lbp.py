@@ -113,18 +113,18 @@ def build_histogram_classifier(registry_file, pkl_file, dump_pkl=True):
     return hist_classifier
 
 if __name__ == "__main__":
-    # Algo: For each train image, compute LBP features and find the nearest neighbor in the test set
-    # Similarity measure: LBP feature histogram intersection
-    # 1. Load all test images
-    # 2. Compute LBP histograms for each test image + store in searchable data structure
+    # Algo: For each test image, compute LBP feature histogram and find the nearest neighbor in the training set.
+    # Similarity measure: LBP feature histogram intersection.
     parser = argparse.ArgumentParser(description="run_file")
     parser.add_argument('--load-classifier', default=False, action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
 
     if args.load_classifier:
+        print(f"Loading pre-computed histogram classifier from: {CLASSIFIER_PKL}")
         hist_classifier = pickle.load(open(CLASSIFIER_PKL, 'rb'))
     else:
         # Populate histogram classifier with LBP histograms for each training subimage
+        print("Building histogram classifier...")
         start = time.time()
         hist_classifier = build_histogram_classifier(TRAIN_FILE_REGISTRY, CLASSIFIER_PKL)
         print(f'Building hist classifier took: {time.time() - start}s')
@@ -154,9 +154,3 @@ if __name__ == "__main__":
     
     print(f'accuracy: {accuracy_score(targets, preds)}')
     print(f'Test phase took: {time.time() - start}s')
-
-    # TODO: 
-    #  - [X] Write script to extract all zip files
-    #  - [X] Figure out how to parse train and test sub-images
-    #  - [X] Compute histograms for all test images and store in searchable data structure
-    #  - [ ] For each train image, find the nearest neighbor in the test set and compute accuracy over all "train" images
